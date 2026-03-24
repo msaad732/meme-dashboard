@@ -4,7 +4,7 @@ import os
 from sqlalchemy import create_engine
 
 # 1. Setup the webpage
-st.set_page_config(page_title="Client Data Dashboard", layout="wide")
+st.set_page_config(page_title=" Data Dashboard", layout="wide")
 st.title("Live Registration Data")
 
 # 2. Securely get the Database URL from Railway's environment
@@ -20,7 +20,7 @@ def load_data():
     engine = create_engine(db_url)
     
     # IMPORTANT: Change 'your_table_name' to your actual Postgres table name
-    query = "SELECT * ticks;" 
+    query = "SELECT * FROM ticks;"
     
     df = pd.read_sql(query, engine)
     return df
