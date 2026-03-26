@@ -18,8 +18,7 @@ API_URL = os.environ.get("WORKER_URL", "https://worker-production-45e2.up.railwa
 @st.cache_data(ttl=30)
 def load_data():
     engine = create_engine(db_url)
-    query = "SELECT * FROM ticks ORDER BY timestamp ASC;"
-    return pd.read_sql(query, engine)
+    return pd.read_sql("SELECT * FROM ticks ORDER BY timestamp ASC;", engine)
 
 
 # ── Sidebar ───────────────────────────────────────────────────────────
@@ -43,27 +42,48 @@ if st.sidebar.button("Refresh Now"):
     st.rerun()
 
 # ── Tabs ──────────────────────────────────────────────────────────────
-tab_data, tab_manual = st.tabs(["Live Data", "Track a Coin"])
+tab_all, tab_tg, tab_manual = st.tabs(["All Coins", "Telegram Signals", "Track a Coin"])
 
-# ── Tab 1: Live data table ────────────────────────────────────────────
-with tab_data:
+
+def _show_table(df):
+    if df.empty:
+        st.info("No data yet.")
+        return
+    filtered = df if selected == "All Coins" else df[df["symbol"] == selected]
+    st.dataframe(filtered, use_container_width=True, hide_index=True)
+    st.caption(f"{len(filtered):,} rows | auto-refreshes every 30 s")
+
+
+# ── Tab 1: All coins ──────────────────────────────────────────────────
+with tab_all:
     if db_url:
         try:
-            if not raw_data.empty:
-                filtered = raw_data if selected == "All Coins" else raw_data[raw_data["symbol"] == selected]
-                st.dataframe(filtered, use_container_width=True, hide_index=True)
-                st.caption(f"{len(filtered):,} rows | auto-refreshes every 30 s")
-            else:
-                st.info("No data yet — tracker is warming up.")
+            _show_table(raw_data)
         except Exception as e:
             st.error(f"Error loading data: {e}")
     else:
         st.error("DATABASE_URL not set.")
 
-# ── Tab 2: Manual / Telegram address tracking ─────────────────────────
+# ── Tab 2: Telegram-only coins ────────────────────────────────────────
+with tab_tg:
+    if db_url:
+        try:
+            if not raw_data.empty and "source" in raw_data.columns:
+                tg_data = raw_data[raw_data["source"] == "telegram"]
+                _show_table(tg_data)
+            elif not raw_data.empty:
+                st.info("source column not yet present — redeploy worker to enable this tab.")
+            else:
+                st.info("No Telegram signals tracked yet.")
+        except Exception as e:
+            st.error(f"Error: {e}")
+    else:
+        st.error("DATABASE_URL not set.")
+
+# ── Tab 3: Manual / Telegram address input ────────────────────────────
 with tab_manual:
     st.subheader("Track a coin by address")
-    st.write("Paste any Solana token address below. Works for coins found on Telegram or anywhere else.")
+    st.write("Paste any Solana token address below.")
 
     address_input = st.text_input("Token address", placeholder="e.g. B4xht9gaypZthqtHvCnt1TWUwdxvV8jDKajgrHxPpump")
 
@@ -75,7 +95,7 @@ with tab_manual:
             try:
                 resp = requests.post(f"{API_URL}/track", json={"address": addr}, timeout=10)
                 if resp.status_code == 200:
-                    st.success(f"Started tracking `{addr[:8]}...` — data will appear in Live Data tab within 30 s.")
+                    st.success(f"Started tracking `{addr[:8]}...` — data appears in All Coins tab within 30 s.")
                 elif resp.status_code == 409:
                     st.info("Already tracking this address.")
                 else:
@@ -89,9 +109,8 @@ with tab_manual:
         try:
             resp = requests.get(f"{API_URL}/status", timeout=5)
             data = resp.json()
-            count = data.get("count", 0)
+            st.metric("Coins being tracked", data.get("count", 0))
             active = data.get("active", [])
-            st.metric("Coins being tracked", count)
             if active:
                 st.write(active)
         except Exception as e:
