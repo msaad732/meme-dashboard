@@ -41,6 +41,24 @@ if st.sidebar.button("Refresh Now"):
     st.cache_data.clear()
     st.rerun()
 
+# Telegram status in sidebar
+st.sidebar.divider()
+st.sidebar.subheader("Telegram Listener")
+try:
+    r = requests.get(f"{API_URL}/status", timeout=4)
+    tg = r.json().get("telegram", {})
+    if not tg.get("enabled"):
+        st.sidebar.warning("Disabled (session not set)")
+    elif tg.get("connected"):
+        st.sidebar.success(f"Connected to @{tg.get('channel', '')}")
+        st.sidebar.caption(f"Signals received: {tg.get('signals_received', 0)}")
+        if tg.get("last_signal"):
+            st.sidebar.caption(f"Last signal: {tg['last_signal']}")
+    else:
+        st.sidebar.error("Enabled but not connected")
+except Exception:
+    st.sidebar.caption("Worker unreachable")
+
 # ── Tabs ──────────────────────────────────────────────────────────────
 tab_all, tab_tg, tab_manual = st.tabs(["All Coins", "Telegram Signals", "Track a Coin"])
 
